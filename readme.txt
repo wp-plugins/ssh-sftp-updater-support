@@ -25,14 +25,3 @@ Keeping your Wordpress install up-to-date and installing plugins in a hassle-fre
 = 0.2 =
 * recursive deletes weren't working correctly (directories never got deleted - just files)
 * use SFTP for recursive chmod instead of SSH / exec
-
-
----------------------------
-
-In my testing, it can take about half a second for all the plugins to be loaded and another half a second for the SSH / SFTP connection to be initialized.  How fast it'll take the connection to be initialized depends on which extensions Math_BigInteger has available to use.
-
-After that there'll be a few second delay after wp-includes/http.php and wp-includes/class-http.php download the file and unpack it in  (see run in class-wp-upgrader.php).
-
-Then Wordpress looks in all the directories in wp-content/upgrade/.  Not sure why it does this but it does and this is why phpseclib might sometimes appear slow when it isn't.
-
-If you're experiencing slow downs when upgrading a plugin try replacing the chmod function with return true;
