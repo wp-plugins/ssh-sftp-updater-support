@@ -11,9 +11,6 @@ set_include_path(get_include_path() . PATH_SEPARATOR . ABSPATH . 'wp-admin/inclu
 require_once('Net/SFTP.php');
 require_once('Crypt/RSA.php');
 
-//define('NET_SSH2_LOGGING', NET_SSH2_LOG_COMPLEX);
-//define('NET_SFTP_LOGGING', NET_SFTP_LOG_COMPLEX);
-
 /**
  * WordPress Filesystem Class for implementing SSH2.
  *
@@ -22,6 +19,8 @@ require_once('Crypt/RSA.php');
  * @subpackage Filesystem
  * @uses WP_Filesystem_Base Extends class
  */
+
+//define('NET_SFTP_LOGGING', NET_SFTP_LOG_REALTIME);
 
 class WP_Filesystem_SSH2 extends WP_Filesystem_Base {
 
@@ -152,21 +151,7 @@ class WP_Filesystem_SSH2 extends WP_Filesystem_Base {
 	}
 
 	function chmod($file, $mode = false, $recursive = false) {
-		if ( ! $this->exists($file) )
-			return false;
-
-		if ( ! $mode ) {
-			if ( $this->is_file($file) )
-				$mode = FS_CHMOD_FILE;
-			elseif ( $this->is_dir($file) )
-				$mode = FS_CHMOD_DIR;
-			else
-				return false;
-		}
-
-		if ( ! $recursive || ! $this->is_dir($file) )
-			return $this->run_command(sprintf('chmod %o %s', $mode, escapeshellarg($file)), true);
-		return $this->run_command(sprintf('chmod -R %o %s', $mode, escapeshellarg($file)), true);
+		return $this->link->chmod($mode, $file, $recursive);
 	}
 
 	function chown($file, $owner, $recursive = false ) {
@@ -177,9 +162,11 @@ class WP_Filesystem_SSH2 extends WP_Filesystem_Base {
 		return $this->run_command(sprintf('chown -R %o %s', $mode, escapeshellarg($file)), true);
 	}
 
-	function owner($file) {
-		$result = $this->link->stat($file);
-		$owneruid = $result['uid'];
+	function owner($file, $owneruid = false) {
+		if ($owneruid === false) {
+			$result = $this->link->stat($file);
+			$owneruid = $result['uid'];
+		}
 
 		if ( ! $owneruid )
 			return false;
@@ -195,9 +182,11 @@ class WP_Filesystem_SSH2 extends WP_Filesystem_Base {
 		return substr(decoct($result['permissions']),3);
 	}
 
-	function group($file) {
-		$result = $this->link->stat($file);
-		$gid = $result['gid'];
+	function group($file, $gid = false) {
+		if ($gid === false) {
+			$result = $this->link->stat($file);
+			$gid = $result['gid'];
+		}
 
 		if ( ! $gid )
 			return false;
@@ -221,17 +210,7 @@ class WP_Filesystem_SSH2 extends WP_Filesystem_Base {
 	}
 
 	function delete($file, $recursive = false) {
-		if ( $this->is_file($file) )
-			return $this->link->delete($file);
-		if ( ! $recursive )
-			 return $this->link->delete($file);
-		$filelist = $this->dirlist($file);
-		if ( is_array($filelist) ) {
-			foreach ( $filelist as $filename => $fileinfo) {
-				$this->delete($file . '/' . $filename, $recursive);
-			}
-		}
-		return $this->link->delete($file);
+		return $this->link->delete($file, $recursive);
 	}
 
 	function exists($file) {
@@ -328,8 +307,8 @@ class WP_Filesystem_SSH2 extends WP_Filesystem_Base {
 			$struc['perms'] 	= $entry['permissions'];
 			$struc['permsn']	= $this->getnumchmodfromh($struc['perms']);
 			$struc['number'] 	= false;
-			$struc['owner']    	= $this->owner($path.'/'.$entry);
-			$struc['group']    	= $this->group($path.'/'.$entry);
+			$struc['owner']    	= $this->owner($path.'/'.$entry, $entry['uid']);
+			$struc['group']    	= $this->group($path.'/'.$entry, $entry['gid']);
 			$struc['size']    	= $entry['size'];//$this->size($path.'/'.$entry);
 			$struc['lastmodunix']= $entry['mtime'];//$this->mtime($path.'/'.$entry);
 			$struc['lastmod']   = date('M j',$struc['lastmodunix']);
