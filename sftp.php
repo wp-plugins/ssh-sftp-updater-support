@@ -8,7 +8,7 @@ Author: TerraFrost
 Author URI: http://phpseclib.sourceforge.net/
 */
 
-set_include_path(get_include_path() . PATH_SEPARATOR . ABSPATH . 'wp-content/plugins/sftp/phpseclib/');
+set_include_path(get_include_path() . PATH_SEPARATOR . ABSPATH . 'wp-content/plugins/ssh-sftp-updater-support/phpseclib/');
 
 require_once('Net/SFTP.php');
 require_once('Crypt/RSA.php');
@@ -21,7 +21,7 @@ add_action('filesystem_method_file', 'phpseclib_filesystem_method_file', 10, 2);
 
 function phpseclib_filesystem_method_file($path, $method) {
 	return $method == 'ssh2' ?
-		ABSPATH . 'wp-content/plugins/sftp/class-wp-filesystem-ssh2.php' :
+		ABSPATH . 'wp-content/plugins/ssh-sftp-updater-support/class-wp-filesystem-ssh2.php' :
 		$path;
 }
 

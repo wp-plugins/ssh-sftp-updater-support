@@ -14,7 +14,7 @@ Keeping your Wordpress install up-to-date and installing plugins in a hassle-fre
 
 == Installation ==
 
-1. Upload `plugin-name.php` to the `/wp-content/plugins/` directory
+1. Upload the files to the `/wp-content/plugins/ssh-sftp-updater-support` directory
 2. Activate the plugin through the 'Plugins' menu in WordPress
 
 == Changelog ==
