@@ -151,7 +151,7 @@ class WP_Filesystem_SSH2 extends WP_Filesystem_Base {
 	}
 
 	function chmod($file, $mode = false, $recursive = false) {
-		return $this->link->chmod($mode, $file, $recursive);
+		return $mode === false ? false : $this->link->chmod($mode, $file, $recursive);
 	}
 
 	function chown($file, $owner, $recursive = false ) {
