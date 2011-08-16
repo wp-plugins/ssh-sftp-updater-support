@@ -89,7 +89,7 @@ class WP_Filesystem_SSH2 extends WP_Filesystem_Base {
 			$rsa = new Crypt_RSA();
 			$rsa->loadKey($this->options['private_key']);
 			if ( ! $this->link->login($this->options['username'], $rsa ) ) {
-				$this->errors->add('auth', sprintf(__('Public and Private keys incorrect for %s'), $this->options['username']));
+				$this->errors->add('auth', sprintf(__('Private key incorrect for %s'), $this->options['username']));
 				return false;
 			}
 		}
