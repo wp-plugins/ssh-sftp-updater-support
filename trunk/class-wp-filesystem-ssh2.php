@@ -27,6 +27,7 @@ class WP_Filesystem_SSH2 extends WP_Filesystem_Base {
 	var $link = false;
 	var $sftp_link = false;
 	var $keys = false;
+	var $password = false;
 	var $errors = array();
 	var $options = array();
 
@@ -69,6 +70,8 @@ class WP_Filesystem_SSH2 extends WP_Filesystem_Base {
 				$this->errors->add('empty_password', __('SSH2 password is required'));
 		} else {
 			$this->options['password'] = $opt['password'];
+
+			$this->password = true;
 		}
 	}
 
@@ -87,6 +90,9 @@ class WP_Filesystem_SSH2 extends WP_Filesystem_Base {
 			}
 		} else {
 			$rsa = new Crypt_RSA();
+			if ( $this->password ) {
+				$rsa->setPassword($this->options['password']);
+			}
 			$rsa->loadKey($this->options['private_key']);
 			if ( ! $this->link->login($this->options['username'], $rsa ) ) {
 				$this->errors->add('auth', sprintf(__('Private key incorrect for %s'), $this->options['username']));
