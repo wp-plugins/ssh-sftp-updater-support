@@ -25,3 +25,5 @@ Keeping your Wordpress install up-to-date and installing plugins in a hassle-fre
 = 0.2 =
 * recursive deletes weren't working correctly (directories never got deleted - just files)
 * use SFTP for recursive chmod instead of SSH / exec
+* fix plugin for people using custom WP_CONTENT_DIR values (thanks, dd32!)
+* plugin prevented non-SFTP install methods from being used

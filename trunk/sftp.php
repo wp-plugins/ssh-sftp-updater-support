@@ -8,25 +8,26 @@ Author: TerraFrost
 Author URI: http://phpseclib.sourceforge.net/
 */
 
-set_include_path(get_include_path() . PATH_SEPARATOR . ABSPATH . 'wp-content/plugins/ssh-sftp-updater-support/phpseclib/');
+set_include_path(get_include_path() . PATH_SEPARATOR . dirname(__FILE__) . '/phpseclib/');
 
 require_once('Net/SFTP.php');
 require_once('Crypt/RSA.php');
 
 // see http://adambrown.info/p/wp_hooks/hook/<filter name>
-add_action('filesystem_method', 'phpseclib_filesystem_method'); // since 2.6
+//add_filter('fs_ftp_connection_types', 'phpseclib_fs_ftp_connection_types'); // since 2.9
+add_action('filesystem_method', 'phpseclib_filesystem_method', 10, 2); // since 2.6
 add_action('request_filesystem_credentials', 'phpseclib_request_filesystem_credentials', 10, 6); // since 2.5
 add_action('fs_ftp_connection_types', 'phpseclib_fs_ftp_connection_types'); // since 2.9
 add_action('filesystem_method_file', 'phpseclib_filesystem_method_file', 10, 2); // since 2.6
 
 function phpseclib_filesystem_method_file($path, $method) {
 	return $method == 'ssh2' ?
-		ABSPATH . 'wp-content/plugins/ssh-sftp-updater-support/class-wp-filesystem-ssh2.php' :
+		dirname(__FILE__) . '/class-wp-filesystem-ssh2.php' :
 		$path;
 }
 
-function phpseclib_filesystem_method() {
-	return 'ssh2';
+function phpseclib_filesystem_method($method, $args) {
+	return ( isset($args['connection_type']) && 'ssh' == $args['connection_type'] ) ? 'ssh2' : $method;
 }
 
 function phpseclib_fs_ftp_connection_types($types) {
