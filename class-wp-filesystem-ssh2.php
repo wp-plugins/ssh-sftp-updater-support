@@ -6,7 +6,7 @@
  * @subpackage Filesystem
  */
 
-set_include_path(get_include_path() . PATH_SEPARATOR . ABSPATH . 'wp-admin/includes/phpseclib/');
+set_include_path(get_include_path() . PATH_SEPARATOR . dirname(__FILE__) . '/phpseclib/');
 
 require_once('Net/SFTP.php');
 require_once('Crypt/RSA.php');
