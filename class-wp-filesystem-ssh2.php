@@ -202,13 +202,13 @@ class WP_Filesystem_SSH2 extends WP_Filesystem_Base {
 		return $grouparray['name'];
 	}
 
-	function copy($source, $destination, $overwrite = false ) {
+	function copy($source, $destination, $overwrite = false, $mode = false) {
 		if ( ! $overwrite && $this->exists($destination) )
 			return false;
 		$content = $this->get_contents($source);
 		if ( false === $content)
 			return false;
-		return $this->put_contents($destination, $content);
+		return $this->put_contents($destination, $content, $mode);
 	}
 
 	function move($source, $destination, $overwrite = false) {
