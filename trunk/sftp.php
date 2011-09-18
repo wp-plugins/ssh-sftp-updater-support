@@ -8,17 +8,11 @@ Author: TerraFrost
 Author URI: http://phpseclib.sourceforge.net/
 */
 
-set_include_path(get_include_path() . PATH_SEPARATOR . dirname(__FILE__) . '/phpseclib/');
-
-require_once('Net/SFTP.php');
-require_once('Crypt/RSA.php');
-
 // see http://adambrown.info/p/wp_hooks/hook/<filter name>
-//add_filter('fs_ftp_connection_types', 'phpseclib_fs_ftp_connection_types'); // since 2.9
-add_action('filesystem_method', 'phpseclib_filesystem_method', 10, 2); // since 2.6
-add_action('request_filesystem_credentials', 'phpseclib_request_filesystem_credentials', 10, 6); // since 2.5
-add_action('fs_ftp_connection_types', 'phpseclib_fs_ftp_connection_types'); // since 2.9
-add_action('filesystem_method_file', 'phpseclib_filesystem_method_file', 10, 2); // since 2.6
+add_filter('filesystem_method', 'phpseclib_filesystem_method', 10, 2); // since 2.6 - WordPress will ignore the ssh option if the php ssh extension is not loaded
+add_filter('request_filesystem_credentials', 'phpseclib_request_filesystem_credentials', 10, 6); // since 2.5 - Alter some strings and don't ask for the public key
+add_filter('fs_ftp_connection_types', 'phpseclib_fs_ftp_connection_types'); // since 2.9 - Add the SSH2 option to the connection options
+add_filter('filesystem_method_file', 'phpseclib_filesystem_method_file', 10, 2); // since 2.6 - Direct WordPress to use our ssh2 class
 
 function phpseclib_filesystem_method_file($path, $method) {
 	return $method == 'ssh2' ?
