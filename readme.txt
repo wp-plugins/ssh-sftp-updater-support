@@ -27,3 +27,4 @@ Keeping your Wordpress install up-to-date and installing plugins in a hassle-fre
 * use SFTP for recursive chmod instead of SSH / exec
 * fix plugin for people using custom WP_CONTENT_DIR values (thanks, dd32!)
 * plugin prevented non-SFTP install methods from being used
+* make it so private keys can be uploaded in addition to being copy / pasted

@@ -49,7 +49,15 @@ function phpseclib_request_filesystem_credentials($value, $form_post, $type, $er
 
 	// Check to see if we are setting the public/private keys for ssh
 	$credentials['public_key'] = defined('FTP_PUBKEY') ? FTP_PUBKEY : (!empty($_POST['public_key']) ? stripslashes($_POST['public_key']) : '');
-	$credentials['private_key'] = defined('FTP_PRIKEY') ? FTP_PRIKEY : (!empty($_POST['private_key']) ? stripslashes($_POST['private_key']) : '');
+	if (defined('FTP_PRIKEY')) {
+		$credentials['private_key'] = FTP_PRIKEY;
+	} else {
+		$credentials['private_key'] = (!empty($_POST['private_key'])) ? stripslashes($_POST['private_key']) : '';
+		if (isset($_FILES['private_key_file']) && file_exists($_FILES['private_key_file']['tmp_name'])) {
+			$credentials['private_key'] = file_get_contents($_FILES['private_key_file']['tmp_name']);
+		}
+	}
+	
 
 	//sanitize the hostname, Some people might pass in odd-data:
 	$credentials['hostname'] = preg_replace('|\w+://|', '', $credentials['hostname']); //Strip any schemes off
@@ -110,16 +118,16 @@ function phpseclib_request_filesystem_credentials($value, $form_post, $type, $er
 <!--
 jQuery(function($){
 	jQuery("#ssh").click(function () {
-		jQuery("#ssh_keys").show();
+		jQuery(".ssh_keys").show();
 	});
 	jQuery("#ftp, #ftps").click(function () {
-		jQuery("#ssh_keys").hide();
+		jQuery(".ssh_keys").hide();
 	});
 	jQuery('form input[value=""]:first').focus();
 });
 -->
 </script>
-<form action="<?php echo $form_post ?>" method="post">
+<form action="<?php echo $form_post ?>" method="post" enctype="multipart/form-data">
 <div class="wrap">
 <?php screen_icon(); ?>
 <h2><?php _e('Connection Information') ?></h2>
@@ -159,13 +167,26 @@ jQuery(function($){
 </tr>
 
 <?php if ( isset($types['ssh']) ) : ?>
-<tr id="ssh_keys" valign="top" style="<?php if ( 'ssh' != $connection_type ) echo 'display:none' ?>">
-<th scope="row"><?php _e('Authentication Keys') ?>
+<tr class="ssh_keys" valign="top" style="<?php if ( 'ssh' != $connection_type ) echo 'display:none' ?>">
+<th scope="row" colspan="2"><?php _e('SSH Authentication Keys') ?>
+<div><?php _e('If a passphrase is needed, enter that in the password field above.') ?></div></th></tr>
+<tr class="ssh_keys" valign="top" style="<?php if ( 'ssh' != $connection_type ) echo 'display:none' ?>">
+<th scope="row">
 <div class="key-labels textright">
-<label for="private_key"><?php _e('Private Key:') ?></label>
-</div></th>
-<td><br /><textarea name="private_key" id="private_key" value="<?php echo esc_attr($private_key) ?>"<?php disabled( defined('FTP_PRIKEY') ); ?>></textarea>
-<div><?php _e('If a passphrase is needed, enter that in the password field above.') ?></div></td>
+<label for="private_key"><?php _e('Copy / Paste Private Key:') ?></label>
+</div>
+</th>
+<td><textarea name="private_key" id="private_key" value="<?php echo esc_attr($private_key) ?>"<?php disabled( defined('FTP_PRIKEY') ); ?>></textarea>
+</td>
+</tr>
+<tr class="ssh_keys" valign="top" style="<?php if ( 'ssh' != $connection_type ) echo 'display:none' ?>">
+<th scope="row">
+<div class="key-labels textright">
+<label for="private_key_file"><?php _e('Upload Private Key:') ?></label>
+</div>
+</th>
+<td><input name="private_key_file" id="private_key_file" type="file" <?php disabled( defined('FTP_PRIKEY') ); ?>/>
+</td>
 </tr>
 <?php endif; ?>
 
