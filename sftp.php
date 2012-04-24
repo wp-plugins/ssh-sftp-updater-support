@@ -47,10 +47,9 @@ function phpseclib_request_filesystem_credentials($value, $form_post, $type, $er
 	$credentials['username'] = defined('FTP_USER') ? FTP_USER : (!empty($_POST['username']) ? stripslashes($_POST['username']) : $credentials['username']);
 	$credentials['password'] = defined('FTP_PASS') ? FTP_PASS : (!empty($_POST['password']) ? stripslashes($_POST['password']) : '');
 
-	// Check to see if we are setting the public/private keys for ssh
-	$credentials['public_key'] = defined('FTP_PUBKEY') ? FTP_PUBKEY : (!empty($_POST['public_key']) ? stripslashes($_POST['public_key']) : '');
-	if (defined('FTP_PRIKEY')) {
-		$credentials['private_key'] = FTP_PRIKEY;
+	// Check to see if we are setting the private key for ssh
+	if (defined('FTP_PRIKEY') && file_exists(FTP_PRIKEY)) {
+		$credentials['private_key'] = file_get_contents(FTP_PRIKEY);
 	} else {
 		$credentials['private_key'] = (!empty($_POST['private_key'])) ? stripslashes($_POST['private_key']) : '';
 		if (isset($_FILES['private_key_file']) && file_exists($_FILES['private_key_file']['tmp_name'])) {

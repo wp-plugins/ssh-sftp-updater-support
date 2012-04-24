@@ -620,6 +620,22 @@ class Net_SSH2 {
     var $log_size;
 
     /**
+     * Timeout
+     *
+     * @see Net_SSH2::setTimeout()
+     * @access private
+     */
+    var $timeout;
+
+    /**
+     * Current Timeout
+     *
+     * @see Net_SSH2::_get_channel_packet()
+     * @access private
+     */
+    var $curTimeout;
+
+    /**
      * Default Constructor.
      *
      * Connects to an SSHv2 server
@@ -1613,6 +1629,19 @@ class Net_SSH2 {
     }
 
     /**
+     * Set Timeout
+     *
+     * $ssh->exec('ping 127.0.0.1'); on a Linux host will never return and will run indefinitely.  setTimeout() makes it so it'll timeout.
+     * Setting $timeout to false or 0 will mean there is no timeout.
+     *
+     * @param Mixed $timeout
+     */
+    function setTimeout($timeout)
+    {
+        $this->timeout = $this->curTimeout = $timeout;
+    }
+
+    /**
      * Execute Command
      *
      * If $block is set to false then Net_SSH2::_get_channel_packet(NET_SSH2_CHANNEL_EXEC) will need to be called manually.
@@ -1625,6 +1654,8 @@ class Net_SSH2 {
      */
     function exec($command, $block = true)
     {
+        $this->curTimeout = $this->timeout;
+
         if (!($this->bitmap & NET_SSH2_MASK_LOGIN)) {
             return false;
         }
@@ -1730,7 +1761,6 @@ class Net_SSH2 {
             return false;
         }
 
-
         $response = $this->_get_binary_packet();
         if ($response === false) {
             user_error('Connection closed by server', E_USER_NOTICE);
@@ -1780,8 +1810,10 @@ class Net_SSH2 {
      * @return String
      * @access public
      */
-    function read($expect, $mode = NET_SSH2_READ_SIMPLE)
+    function read($expect = '', $mode = NET_SSH2_READ_SIMPLE)
     {
+        $this->curTimeout = $this->timeout;
+
         if (!($this->bitmap & NET_SSH2_MASK_LOGIN)) {
             user_error('Operation disallowed prior to login()', E_USER_NOTICE);
             return false;
@@ -1798,11 +1830,14 @@ class Net_SSH2 {
                 preg_match($expect, $this->interactiveBuffer, $matches);
                 $match = $matches[0];
             }
-            $pos = strpos($this->interactiveBuffer, $match);
+            $pos = !empty($match) ? strpos($this->interactiveBuffer, $match) : false;
             if ($pos !== false) {
                 return $this->_string_shift($this->interactiveBuffer, $pos + strlen($match));
             }
             $response = $this->_get_channel_packet(NET_SSH2_CHANNEL_SHELL);
+            if (is_bool($response)) {
+                return $response ? $this->_string_shift($this->interactiveBuffer, strlen($this->interactiveBuffer)) : false;
+            }
 
             $this->interactiveBuffer.= $response;
         }
@@ -1865,7 +1900,7 @@ class Net_SSH2 {
      */
     function _get_binary_packet()
     {
-        if (feof($this->fsock)) {
+        if (!is_resource($this->fsock) || feof($this->fsock)) {
             user_error('Connection closed prematurely', E_USER_NOTICE);
             return false;
         }
@@ -1880,6 +1915,10 @@ class Net_SSH2 {
 
         if ($this->decrypt !== false) {
             $raw = $this->decrypt->decrypt($raw);
+        }
+        if ($raw === false) {
+            user_error('Unable to decrypt content', E_USER_NOTICE);
+            return false;
         }
 
         extract(unpack('Npacket_length/Cpadding_length', $this->_string_shift($raw, 5)));
@@ -2027,6 +2066,25 @@ class Net_SSH2 {
         }
 
         while (true) {
+            if ($this->curTimeout) {
+                $read = array($this->fsock);
+                $write = $except = NULL;
+
+                stream_set_blocking($this->fsock, false);
+
+                $start = strtok(microtime(), ' ') + strtok(''); // http://php.net/microtime#61838
+                // on windows this returns a "Warning: Invalid CRT parameters detected" error
+                if (!@stream_select($read, $write, $except, $this->curTimeout)) {
+                    stream_set_blocking($this->fsock, true);
+                    $this->_close_channel($client_channel);
+                    return true;
+                }
+                $elapsed = strtok(microtime(), ' ') + strtok('') - $start;
+                $this->curTimeout-= $elapsed;
+
+                stream_set_blocking($this->fsock, true);
+            }
+
             $response = $this->_get_binary_packet();
             if ($response === false) {
                 user_error('Connection closed by server', E_USER_NOTICE);
@@ -2044,11 +2102,11 @@ class Net_SSH2 {
                     switch ($type) {
                         case NET_SSH2_MSG_CHANNEL_OPEN_CONFIRMATION:
                             extract(unpack('Nserver_channel', $this->_string_shift($response, 4)));
-                            $this->server_channels[$client_channel] = $server_channel;
+                            $this->server_channels[$channel] = $server_channel;
                             $this->_string_shift($response, 4); // skip over (server) window size
                             $temp = unpack('Npacket_size_client_to_server', $this->_string_shift($response, 4));
-                            $this->packet_size_client_to_server[$client_channel] = $temp['packet_size_client_to_server'];
-                            return true;
+                            $this->packet_size_client_to_server[$channel] = $temp['packet_size_client_to_server'];
+                            return $client_channel == $channel ? true : $this->_get_channel_packet($client_channel, $skip_extended);
                         //case NET_SSH2_MSG_CHANNEL_OPEN_FAILURE:
                         default:
                             user_error('Unable to open channel', E_USER_NOTICE);
@@ -2064,7 +2122,8 @@ class Net_SSH2 {
                             user_error('Unable to request pseudo-terminal', E_USER_NOTICE);
                             return $this->_disconnect(NET_SSH2_DISCONNECT_BY_APPLICATION);
                     }
-
+                case NET_SSH2_MSG_CHANNEL_CLOSE:
+                    return $type == NET_SSH2_MSG_CHANNEL_CLOSE ? true : $this->_get_channel_packet($client_channel, $skip_extended);
             }
 
             switch ($type) {
@@ -2121,7 +2180,11 @@ class Net_SSH2 {
                             if ($length) {
                                 $this->errors[count($this->errors)].= "\r\n" . $this->_string_shift($response, $length);
                             }
-                        //case 'exit-status':
+                        case 'exit-status':
+                            // "The channel needs to be closed with SSH_MSG_CHANNEL_CLOSE after this message."
+                            // -- http://tools.ietf.org/html/rfc4254#section-6.10
+                            $this->_close_channel($client_channel);
+                            return true;
                         default:
                             // "Some systems may not implement signals, in which case they SHOULD ignore this message."
                             //  -- http://tools.ietf.org/html/rfc4254#section-6.9
@@ -2152,7 +2215,7 @@ class Net_SSH2 {
      */
     function _send_binary_packet($data)
     {
-        if (feof($this->fsock)) {
+        if (!is_resource($this->fsock) || feof($this->fsock)) {
             user_error('Connection closed prematurely', E_USER_NOTICE);
             return false;
         }
@@ -2289,14 +2352,19 @@ class Net_SSH2 {
     {
         // see http://tools.ietf.org/html/rfc4254#section-5.3
 
-        $packet = pack('CN',
-            NET_SSH2_MSG_CHANNEL_EOF,
-            $this->server_channels[$client_channel]);
-        if (!$this->_send_binary_packet($packet)) {
-            return false;
-        }
+        $this->_send_binary_packet(pack('CN', NET_SSH2_MSG_CHANNEL_EOF, $this->server_channels[$client_channel]));
 
-        while ($this->_get_channel_packet($client_channel) !== true);
+        $this->_send_binary_packet(pack('CN', NET_SSH2_MSG_CHANNEL_CLOSE, $this->server_channels[$client_channel]));
+
+        $this->channel_status[$client_channel] = NET_SSH2_MSG_CHANNEL_CLOSE;
+
+        $this->curTimeout = 0;
+
+        while (!is_bool($this->_get_channel_packet($client_channel)));
+
+        if ($this->bitmap & NET_SSH2_MASK_SHELL) {
+            $this->bitmap&= ~NET_SSH2_MASK_SHELL;
+        }
     }
 
     /**
