@@ -1005,7 +1005,10 @@ class Net_SFTP extends Net_SSH2 {
     function _size($filename)
     {
         $result = $this->_stat($filename, NET_SFTP_LSTAT);
-        return $result === false ? false : $result['size'];
+        if ($result === false) {
+            return false;
+        }
+        return isset($result['size']) ? $result['size'] : -1;
     }
 
     /**
@@ -1427,11 +1430,6 @@ class Net_SFTP extends Net_SSH2 {
             return false;
         }
 
-        $size = $this->_size($remote_file);
-        if ($size === false) {
-            return false;
-        }
-
         $packet = pack('Na*N2', strlen($remote_file), $remote_file, NET_SFTP_OPEN_READ, 0);
         if (!$this->_send_sftp_packet(NET_SFTP_OPEN, $packet)) {
             return false;
@@ -1461,9 +1459,12 @@ class Net_SFTP extends Net_SSH2 {
         }
 
         $read = 0;
-        while ($read < $size) {
+        while (true) {
             $packet = pack('Na*N3', strlen($handle), $handle, 0, $read, 1 << 20);
             if (!$this->_send_sftp_packet(NET_SFTP_READ, $packet)) {
+                if ($local_file !== false) {
+                    fclose($fp);
+                }
                 return false;
             }
 
@@ -1484,8 +1485,15 @@ class Net_SFTP extends Net_SSH2 {
                     break 2;
                 default:
                     user_error('Expected SSH_FXP_DATA or SSH_FXP_STATUS', E_USER_NOTICE);
+                    if ($local_file !== false) {
+                        fclose($fp);
+                    }
                     return false;
             }
+        }
+
+        if ($local_file !== false) {
+            fclose($fp);
         }
 
         if (!$this->_send_sftp_packet(NET_SFTP_CLOSE, pack('Na*', strlen($handle), $handle))) {
@@ -1510,7 +1518,6 @@ class Net_SFTP extends Net_SSH2 {
             return $content;
         }
 
-        fclose($fp);
         return true;
     }
 
@@ -1522,7 +1529,7 @@ class Net_SFTP extends Net_SSH2 {
      * @return Boolean
      * @access public
      */
-    function delete($path, $recursive = false)
+    function delete($path, $recursive = true)
     {
         if (!($this->bitmap & NET_SSH2_MASK_LOGIN)) {
             return false;
@@ -1811,6 +1818,8 @@ class Net_SFTP extends Net_SSH2 {
      */
     function _get_sftp_packet()
     {
+        $this->curTimeout = false;
+
         $start = strtok(microtime(), ' ') + strtok(''); // http://php.net/microtime#61838
 
         // SFTP packet length
@@ -1862,7 +1871,7 @@ class Net_SFTP extends Net_SSH2 {
             } else {
                 $this->packet_type_log[] = $packet_type;
                 if (NET_SFTP_LOGGING == NET_SFTP_LOG_COMPLEX) {
-                    $this->packet_log[] = $data;
+                    $this->packet_log[] = $packet;
                 }
             }
         }
