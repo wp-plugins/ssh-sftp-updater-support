@@ -4,7 +4,7 @@ Donate link: http://sourceforge.net/donate/index.php?group_id=198487
 Tags: ssh, sftp
 Requires at least: 3.1
 Tested up to: 3.3
-Stable tag: trunk
+Stable tag: 0.3
 
 "SSH SFTP Updater Support" is the easiest way to keep your Wordpress installation up-to-date with SFTP.
 

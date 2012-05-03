@@ -3,7 +3,7 @@
 Plugin Name: SSH SFTP Updater Support
 Plugin URI: http://phpseclib.sourceforge.net/wordpress.htm
 Description: Update your Wordpress blog / plugins via SFTP without libssh2
-Version: 0.1
+Version: 0.3
 Author: TerraFrost
 Author URI: http://phpseclib.sourceforge.net/
 */
