@@ -3,7 +3,7 @@
 Plugin Name: SSH SFTP Updater Support
 Plugin URI: http://phpseclib.sourceforge.net/wordpress.htm
 Description: Update your Wordpress blog / plugins via SFTP without libssh2
-Version: 0.3
+Version: 0.4
 Author: TerraFrost
 Author URI: http://phpseclib.sourceforge.net/
 */
@@ -30,7 +30,7 @@ function phpseclib_fs_ftp_connection_types($types) {
 }
 
 // this has been pretty much copy / pasted from wp-admin/includes/file.php
-function phpseclib_request_filesystem_credentials($value, $form_post, $type, $error, $context, $extra_fields) {
+function phpseclib_request_filesystem_credentials($value, $form_post, $type = '', $error = false, $context = false, $extra_fields = null)) {
 	if ( empty($type) )
 		$type = get_filesystem_method(array(), $context);
 
