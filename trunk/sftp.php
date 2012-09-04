@@ -30,7 +30,7 @@ function phpseclib_fs_ftp_connection_types($types) {
 }
 
 // this has been pretty much copy / pasted from wp-admin/includes/file.php
-function phpseclib_request_filesystem_credentials($value, $form_post, $type = '', $error = false, $context = false, $extra_fields = null)) {
+function phpseclib_request_filesystem_credentials($value, $form_post, $type = '', $error = false, $context = false, $extra_fields = null) {
 	if ( empty($type) )
 		$type = get_filesystem_method(array(), $context);
 
