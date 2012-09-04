@@ -122,6 +122,14 @@ jQuery(function($){
 	jQuery("#ftp, #ftps").click(function () {
 		jQuery(".ssh_keys").hide();
 	});
+	jQuery('form').submit(function () {
+		if(typeof(Storage)!=="undefined") {
+			localStorage.privateKeyFile = jQuery("#private_key").val();
+		}
+	});
+	if(typeof(Storage)!=="undefined" && localStorage.privateKeyFile) {
+		jQuery('#private_key').val(localStorage.privateKeyFile);
+	}
 	jQuery('form input[value=""]:first').focus();
 });
 -->
