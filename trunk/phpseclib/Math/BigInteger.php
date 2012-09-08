@@ -282,6 +282,10 @@ class Math_BigInteger {
             }
         }
 
+        if (function_exists('openssl_public_encrypt') && !defined('MATH_BIGINTEGER_OPENSSL_DISABLE') && !defined('MATH_BIGINTEGER_OPENSSL_ENABLED')) {
+            define('MATH_BIGINTEGER_OPENSSL_ENABLED', true);
+        }
+
         switch ( MATH_BIGINTEGER_MODE ) {
             case MATH_BIGINTEGER_MODE_GMP:
                 if (is_resource($x) && get_resource_type($x) == 'GMP integer') {
@@ -297,7 +301,9 @@ class Math_BigInteger {
                 $this->value = array();
         }
 
-        if (empty($x)) {
+        // '0' counts as empty() but when the base is 256 '0' is equal to ord('0') or 48
+        // '0' is the only  value like this per http://php.net/empty
+        if (empty($x) && (abs($base) != 256 || $x !== '0')) {
             return;
         }
 
@@ -599,13 +605,19 @@ class Math_BigInteger {
     {
         $hex = $this->toHex($twos_compliment);
         $bits = '';
-        for ($i = 0, $end = strlen($hex) & 0xFFFFFFF8; $i < $end; $i+=8) {
-            $bits.= str_pad(decbin(hexdec(substr($hex, $i, 8))), 32, '0', STR_PAD_LEFT);
+        for ($i = strlen($hex) - 8, $start = strlen($hex) & 7; $i >= $start; $i-=8) {
+            $bits = str_pad(decbin(hexdec(substr($hex, $i, 8))), 32, '0', STR_PAD_LEFT) . $bits;
         }
-        if ($end != strlen($hex)) { // hexdec('') == 0
-            $bits.= str_pad(decbin(hexdec(substr($hex, $end))), strlen($hex) & 7, '0', STR_PAD_LEFT);
+        if ($start) { // hexdec('') == 0
+            $bits = str_pad(decbin(hexdec(substr($hex, 0, $start))), 8, '0', STR_PAD_LEFT) . $bits;
         }
-        return $this->precision > 0 ? substr($bits, -$this->precision) : ltrim($bits, '0');
+        $result = $this->precision > 0 ? substr($bits, -$this->precision) : ltrim($bits, '0');
+
+        if ($twos_compliment && $this->compare(new Math_BigInteger()) > 0 && $this->precision <= 0) {
+            return '0' . $result;
+        }
+
+        return $result;
     }
 
     /**
@@ -1587,6 +1599,53 @@ class Math_BigInteger {
             }
 
             return $this->_normalize($temp->modPow($e, $n));
+        }
+
+        if (MATH_BIGINTEGER_MODE == MATH_BIGINTEGER_MODE_GMP) {
+            $temp = new Math_BigInteger();
+            $temp->value = gmp_powm($this->value, $e->value, $n->value);
+
+            return $this->_normalize($temp);
+        }
+
+        if ($this->compare(new Math_BigInteger()) < 0 || $this->compare($n) > 0) {
+            list(, $temp) = $this->divide($n);
+            return $temp->modPow($e, $n);
+        }
+
+        if (defined('MATH_BIGINTEGER_OPENSSL_ENABLED')) {
+            $components = array(
+                'modulus' => $n->toBytes(true),
+                'publicExponent' => $e->toBytes(true)
+            );
+
+            $components = array(
+                'modulus' => pack('Ca*a*', 2, $this->_encodeASN1Length(strlen($components['modulus'])), $components['modulus']),
+                'publicExponent' => pack('Ca*a*', 2, $this->_encodeASN1Length(strlen($components['publicExponent'])), $components['publicExponent'])
+            );
+
+            $RSAPublicKey = pack('Ca*a*a*',
+                48, $this->_encodeASN1Length(strlen($components['modulus']) + strlen($components['publicExponent'])),
+                $components['modulus'], $components['publicExponent']
+            );
+
+            $rsaOID = pack('H*', '300d06092a864886f70d0101010500'); // hex version of MA0GCSqGSIb3DQEBAQUA
+            $RSAPublicKey = chr(0) . $RSAPublicKey;
+            $RSAPublicKey = chr(3) . $this->_encodeASN1Length(strlen($RSAPublicKey)) . $RSAPublicKey;
+
+            $encapsulated = pack('Ca*a*',
+                48, $this->_encodeASN1Length(strlen($rsaOID . $RSAPublicKey)), $rsaOID . $RSAPublicKey
+            );
+
+            $RSAPublicKey = "-----BEGIN PUBLIC KEY-----\r\n" .
+                             chunk_split(base64_encode($encapsulated)) .
+                             '-----END PUBLIC KEY-----';
+
+            $plaintext = str_pad($this->toBytes(), strlen($n->toBytes(true)) - 1, "\0", STR_PAD_LEFT);
+
+            if (openssl_public_encrypt($plaintext, $result, $RSAPublicKey, OPENSSL_NO_PADDING)) {
+                return new Math_BigInteger($result, 256);
+            }
         }
 
         switch ( MATH_BIGINTEGER_MODE ) {
@@ -3547,5 +3606,25 @@ class Math_BigInteger {
     {
         $temp = unpack('Nint', str_pad($x, 4, chr(0), STR_PAD_LEFT));
         return $temp['int'];
+    }
+
+    /**
+     * DER-encode an integer
+     *
+     * The ability to DER-encode integers is needed to create RSA public keys for use with OpenSSL
+     *
+     * @see modPow()
+     * @access private
+     * @param Integer $length
+     * @return String
+     */
+    function _encodeASN1Length($length)
+    {
+        if ($length <= 0x7F) {
+            return chr($length);
+        }
+
+        $temp = ltrim(pack('N', $length), chr(0));
+        return pack('Ca*', 0x80 | strlen($temp), $temp);
     }
 }

@@ -143,15 +143,6 @@ class Crypt_RC4 {
     var $decryptIndex = 0;
 
     /**
-     * MCrypt parameters
-     *
-     * @see Crypt_RC4::setMCrypt()
-     * @var Array
-     * @access private
-     */
-    var $mcrypt = array('', '');
-
-    /**
      * The Encryption Algorithm
      *
      * Only used if CRYPT_RC4_MODE == CRYPT_RC4_MODE_MCRYPT.  Only possible values are MCRYPT_RC4 or MCRYPT_ARCFOUR.
@@ -184,10 +175,7 @@ class Crypt_RC4 {
     {
         if ( !defined('CRYPT_RC4_MODE') ) {
             switch (true) {
-                case extension_loaded('mcrypt') && (defined('MCRYPT_ARCFOUR') || defined('MCRYPT_RC4')):
-                    // i'd check to see if rc4 was supported, by doing in_array('arcfour', mcrypt_list_algorithms('')),
-                    // but since that can be changed after the object has been created, there doesn't seem to be
-                    // a lot of point...
+                case extension_loaded('mcrypt') && (defined('MCRYPT_ARCFOUR') || defined('MCRYPT_RC4')) && in_array('arcfour', mcrypt_list_algorithms()):
                     define('CRYPT_RC4_MODE', CRYPT_RC4_MODE_MCRYPT);
                     break;
                 default:
@@ -246,7 +234,7 @@ class Crypt_RC4 {
      *
      * Depending on what $method is set to, setPassword()'s (optional) parameters are as follows:
      *     {@link http://en.wikipedia.org/wiki/PBKDF2 pbkdf2}:
-     *         $hash, $salt, $method, $dkLen
+     *         $hash, $salt, $count, $dkLen
      *
      * @param String $password
      * @param optional String $method
@@ -264,18 +252,15 @@ class Crypt_RC4 {
                 }
                 // WPA and WPA use the SSID as the salt
                 if (!isset($salt)) {
-                    $salt = 'phpseclib';
+                    $salt = 'phpseclib/salt';
                 }
                 // RFC2898#section-4.2 uses 1,000 iterations by default
                 // WPA and WPA2 use 4,096.
                 if (!isset($count)) {
                     $count = 1000;
                 }
-                if (!isset($count)) {
-                    $count = 1000;
-                }
                 if (!isset($dkLen)) {
-                    $count = 1000;
+                    $dkLen = 128;
                 }
 
                 if (!class_exists('Crypt_Hash')) {
@@ -324,24 +309,6 @@ class Crypt_RC4 {
     }
 
     /**
-     * Sets MCrypt parameters. (optional)
-     *
-     * If MCrypt is being used, empty strings will be used, unless otherwise specified.
-     *
-     * @link http://php.net/function.mcrypt-module-open#function.mcrypt-module-open
-     * @access public
-     * @param optional Integer $algorithm_directory
-     * @param optional Integer $mode_directory
-     */
-    function setMCrypt($algorithm_directory = '', $mode_directory = '')
-    {
-        if ( CRYPT_RC4_MODE == CRYPT_RC4_MODE_MCRYPT ) {
-            $this->mcrypt = array($algorithm_directory, $mode_directory);
-            $this->_closeMCrypt();
-        }
-    }
-
-    /**
      * Encrypts a message.
      *
      * @see Crypt_RC4::_crypt()
@@ -383,7 +350,7 @@ class Crypt_RC4 {
             $keyStream = $mode == CRYPT_RC4_ENCRYPT ? 'encryptStream' : 'decryptStream';
 
             if ($this->$keyStream === false) {
-                $this->$keyStream = mcrypt_module_open($this->mode, $this->mcrypt[0], MCRYPT_MODE_STREAM, $this->mcrypt[1]);
+                $this->$keyStream = mcrypt_module_open($this->mode, '', MCRYPT_MODE_STREAM, '');
                 mcrypt_generic_init($this->$keyStream, $this->key, '');
             } else if (!$this->continuousBuffer) {
                 mcrypt_generic_init($this->$keyStream, $this->key, '');
