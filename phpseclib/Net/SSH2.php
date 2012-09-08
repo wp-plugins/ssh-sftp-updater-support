@@ -73,32 +73,48 @@
  *
  * Used to do Diffie-Hellman key exchange and DSA/RSA signature verification.
  */
-require_once('Math/BigInteger.php');
+if (!class_exists('Math_BigInteger')) {
+    require_once('Math/BigInteger.php');
+}
 
 /**
  * Include Crypt_Random
  */
-require_once('Crypt/Random.php');
+// the class_exists() will only be called if the crypt_random function hasn't been defined and
+// will trigger a call to __autoload() if you're wanting to auto-load classes
+// call function_exists() a second time to stop the require_once from being called outside
+// of the auto loader
+if (!function_exists('crypt_random') && !class_exists('Crypt_Random') && !function_exists('crypt_random')) {
+    require_once('Crypt/Random.php');
+}
 
 /**
  * Include Crypt_Hash
  */
-require_once('Crypt/Hash.php');
+if (!class_exists('Crypt_Hash')) {
+    require_once('Crypt/Hash.php');
+}
 
 /**
  * Include Crypt_TripleDES
  */
-require_once('Crypt/TripleDES.php');
+if (!class_exists('Crypt_TripleDES')) {
+    require_once('Crypt/TripleDES.php');
+}
 
 /**
  * Include Crypt_RC4
  */
-require_once('Crypt/RC4.php');
+if (!class_exists('Crypt_RC4')) {
+    require_once('Crypt/RC4.php');
+}
 
 /**
  * Include Crypt_AES
  */
-require_once('Crypt/AES.php');
+if (!class_exists('Crypt_AES')) {
+    require_once('Crypt/AES.php');
+}
 
 /**#@+
  * Execution Bitmap Masks
@@ -143,6 +159,14 @@ define('NET_SSH2_LOG_SIMPLE',  1);
  * Returns the message content
  */
 define('NET_SSH2_LOG_COMPLEX', 2);
+/**
+ * Outputs the content real-time
+ */
+define('NET_SSH2_LOG_REALTIME', 3);
+/**
+ * Dumps the content real-time to a file
+ */
+define('NET_SSH2_LOG_REALTIME_FILE', 4);
 /**#@-*/
 
 /**#@+
@@ -178,7 +202,7 @@ class Net_SSH2 {
      * @var String
      * @access private
      */
-    var $identifier = 'SSH-2.0-phpseclib_0.2';
+    var $identifier = 'SSH-2.0-phpseclib_0.3';
 
     /**
      * The Socket Object
@@ -191,7 +215,7 @@ class Net_SSH2 {
     /**
      * Execution Bitmap
      *
-     * The bits that are set reprsent functions that have been called already.  This is used to determine
+     * The bits that are set represent functions that have been called already.  This is used to determine
      * if a requisite function has been successfully executed.  If not, an error should be thrown.
      *
      * @var Integer
@@ -636,6 +660,46 @@ class Net_SSH2 {
     var $curTimeout;
 
     /**
+     * Real-time log file pointer
+     *
+     * @see Net_SSH2::_append_log()
+     * @access private
+     */
+    var $realtime_log_file;
+
+    /**
+     * Real-time log file size
+     *
+     * @see Net_SSH2::_append_log()
+     * @access private
+     */
+    var $realtime_log_size;
+
+    /**
+     * Has the signature been validated?
+     *
+     * @see Net_SSH2::getServerPublicHostKey()
+     * @access private
+     */
+    var $signature_validated = false;
+
+    /**
+     * Real-time log file wrap boolean
+     *
+     * @see Net_SSH2::_append_log()
+     * @access private
+     */
+    var $realtime_log_wrap;
+
+    /**
+     * Flag to suppress stderr from output
+     *
+     * @see Net_SSH2::enableQuietMode()
+     * @access private
+     */
+    var $quiet_mode = false;
+
+    /**
      * Default Constructor.
      *
      * Connects to an SSHv2 server
@@ -718,11 +782,37 @@ class Net_SSH2 {
                   61 => 'NET_SSH2_MSG_USERAUTH_INFO_RESPONSE')
         );
 
+        $start = strtok(microtime(), ' ') + strtok(''); // http://php.net/microtime#61838
         $this->fsock = @fsockopen($host, $port, $errno, $errstr, $timeout);
         if (!$this->fsock) {
             user_error(rtrim("Cannot connect to $host. Error $errno. $errstr"), E_USER_NOTICE);
             return;
         }
+        $elapsed = strtok(microtime(), ' ') + strtok('') - $start;
+
+        $timeout-= $elapsed;
+
+        if ($timeout <= 0) {
+            user_error(rtrim("Cannot connect to $host. Timeout error"), E_USER_NOTICE);
+            return;
+        }
+
+        $read = array($this->fsock);
+        $write = $except = NULL;
+
+        stream_set_blocking($this->fsock, false);
+
+        $sec = floor($timeout);
+        $usec = 1000000 * ($timeout - $sec);
+
+        // on windows this returns a "Warning: Invalid CRT parameters detected" error
+        // the !count() is done as a workaround for <https://bugs.php.net/42682>
+        if (!@stream_select($read, $write, $except, $sec, $usec) && !count($read)) {
+            user_error(rtrim("Cannot connect to $host. Banner timeout"), E_USER_NOTICE);
+            return;
+        }
+
+        stream_set_blocking($this->fsock, true);
 
         /* According to the SSH2 specs,
 
@@ -1618,7 +1708,7 @@ class Net_SSH2 {
 
         switch ($type) {
             case NET_SSH2_MSG_USERAUTH_FAILURE:
-                // either the login is bad or the server employees multi-factor authentication
+                // either the login is bad or the server employs multi-factor authentication
                 return false;
             case NET_SSH2_MSG_USERAUTH_SUCCESS:
                 $this->bitmap |= NET_SSH2_MASK_LOGIN;
@@ -1874,6 +1964,9 @@ class Net_SSH2 {
     function disconnect()
     {
         $this->_disconnect(NET_SSH2_DISCONNECT_BY_APPLICATION);
+        if (isset($this->realtime_log_file) && is_resource($this->realtime_log_file)) {
+            fclose($this->realtime_log_file);
+        }
     }
 
     /**
@@ -1953,12 +2046,10 @@ class Net_SSH2 {
         $this->get_seq_no++;
 
         if (defined('NET_SSH2_LOGGING')) {
-            $temp = isset($this->message_numbers[ord($payload[0])]) ? $this->message_numbers[ord($payload[0])] : 'UNKNOWN (' . ord($payload[0]) . ')';
-            $this->message_number_log[] = '<- ' . $temp .
-                                          ' (' . round($stop - $start, 4) . 's)';
-            if (NET_SSH2_LOGGING == NET_SSH2_LOG_COMPLEX) {
-                $this->_append_log($payload);
-            }
+            $message_number = isset($this->message_numbers[ord($payload[0])]) ? $this->message_numbers[ord($payload[0])] : 'UNKNOWN (' . ord($payload[0]) . ')';
+            $message_number = '<- ' . $message_number .
+                              ' (' . round($stop - $start, 4) . 's)';
+            $this->_append_log($message_number, $payload);
         }
 
         return $this->_filter($payload);
@@ -2051,6 +2142,30 @@ class Net_SSH2 {
     }
 
     /**
+     * Enable Quiet Mode
+     *
+     * Suppress stderr from output
+     *
+     * @access public
+     */
+    function enableQuietMode()
+    {
+        $this->quiet_mode = true;
+    }
+
+    /**
+     * Disable Quiet Mode
+     *
+     * Show stderr in output
+     *
+     * @access public
+     */
+    function disableQuietMode()
+    {
+        $this->quiet_mode = false;
+    }
+
+    /**
      * Gets channel data
      *
      * Returns the data as a string if it's available and false if not.
@@ -2073,8 +2188,10 @@ class Net_SSH2 {
                 stream_set_blocking($this->fsock, false);
 
                 $start = strtok(microtime(), ' ') + strtok(''); // http://php.net/microtime#61838
+                $sec = floor($this->curTimeout);
+                $usec = 1000000 * ($this->curTimeout - $sec);
                 // on windows this returns a "Warning: Invalid CRT parameters detected" error
-                if (!@stream_select($read, $write, $except, $this->curTimeout)) {
+                if (!@stream_select($read, $write, $except, $sec, $usec) && !count($read)) {
                     stream_set_blocking($this->fsock, true);
                     $this->_close_channel($client_channel);
                     return true;
@@ -2148,7 +2265,7 @@ class Net_SSH2 {
                     $this->channel_buffers[$client_channel][] = $data;
                     break;
                 case NET_SSH2_MSG_CHANNEL_EXTENDED_DATA:
-                    if ($skip_extended) {
+                    if ($skip_extended || $this->quiet_mode) {
                         break;
                     }
                     /*
@@ -2183,8 +2300,10 @@ class Net_SSH2 {
                         case 'exit-status':
                             // "The channel needs to be closed with SSH_MSG_CHANNEL_CLOSE after this message."
                             // -- http://tools.ietf.org/html/rfc4254#section-6.10
-                            $this->_close_channel($client_channel);
-                            return true;
+                            $this->_send_binary_packet(pack('CN', NET_SSH2_MSG_CHANNEL_EOF, $this->server_channels[$client_channel]));
+                            $this->_send_binary_packet(pack('CN', NET_SSH2_MSG_CHANNEL_CLOSE, $this->server_channels[$channel]));
+
+                            $this->channel_status[$channel] = NET_SSH2_MSG_CHANNEL_EOF;
                         default:
                             // "Some systems may not implement signals, in which case they SHOULD ignore this message."
                             //  -- http://tools.ietf.org/html/rfc4254#section-6.9
@@ -2192,7 +2311,16 @@ class Net_SSH2 {
                     }
                     break;
                 case NET_SSH2_MSG_CHANNEL_CLOSE:
-                    $this->_send_binary_packet(pack('CN', NET_SSH2_MSG_CHANNEL_CLOSE, $this->server_channels[$channel]));
+                    $this->curTimeout = 0;
+
+                    if ($this->bitmap & NET_SSH2_MASK_SHELL) {
+                        $this->bitmap&= ~NET_SSH2_MASK_SHELL;
+                    }
+                    if ($this->channel_status[$channel] != NET_SSH2_MSG_CHANNEL_EOF) {
+                        $this->_send_binary_packet(pack('CN', NET_SSH2_MSG_CHANNEL_CLOSE, $this->server_channels[$channel]));
+                    }
+
+                    $this->channel_status[$channel] = NET_SSH2_MSG_CHANNEL_CLOSE;
                     return true;
                 case NET_SSH2_MSG_CHANNEL_EOF:
                     break;
@@ -2255,12 +2383,10 @@ class Net_SSH2 {
         $stop = strtok(microtime(), ' ') + strtok('');
 
         if (defined('NET_SSH2_LOGGING')) {
-            $temp = isset($this->message_numbers[ord($data[0])]) ? $this->message_numbers[ord($data[0])] : 'UNKNOWN (' . ord($data[0]) . ')';
-            $this->message_number_log[] = '-> ' . $temp .
-                                          ' (' . round($stop - $start, 4) . 's)';
-            if (NET_SSH2_LOGGING == NET_SSH2_LOG_COMPLEX) {
-                $this->_append_log($data);
-            }
+            $message_number = isset($this->message_numbers[ord($data[0])]) ? $this->message_numbers[ord($data[0])] : 'UNKNOWN (' . ord($data[0]) . ')';
+            $message_number = '-> ' . $message_number .
+                              ' (' . round($stop - $start, 4) . 's)';
+            $this->_append_log($message_number, $data);
         }
 
         return $result;
@@ -2274,15 +2400,60 @@ class Net_SSH2 {
      * @param String $data
      * @access private
      */
-    function _append_log($data)
+    function _append_log($message_number, $message)
     {
-        $this->_string_shift($data);
-        $this->log_size+= strlen($data);
-        $this->message_log[] = $data;
-        while ($this->log_size > NET_SSH2_LOG_MAX_SIZE) {
-            $this->log_size-= strlen(array_shift($this->message_log));
-            array_shift($this->message_number_log);
-        }
+            switch (NET_SSH2_LOGGING) {
+                // useful for benchmarks
+                case NET_SSH2_LOG_SIMPLE:
+                    $this->message_number_log[] = $message_number;
+                    break;
+                // the most useful log for SSH2
+                case NET_SSH2_LOG_COMPLEX:
+                    $this->message_number_log[] = $message_number;
+                    $this->_string_shift($message);
+                    $this->log_size+= strlen($message);
+                    $this->message_log[] = $message;
+                    while ($this->log_size > NET_SSH2_LOG_MAX_SIZE) {
+                        $this->log_size-= strlen(array_shift($this->message_log));
+                        array_shift($this->message_number_log);
+                    }
+                    break;
+                // dump the output out realtime; packets may be interspersed with non packets,
+                // passwords won't be filtered out and select other packets may not be correctly
+                // identified
+                case NET_SSH2_LOG_REALTIME:
+                    echo "<pre>\r\n" . $this->_format_log(array($message), array($message_number)) . "\r\n</pre>\r\n";
+                    flush();
+                    ob_flush();
+                    break;
+                // basically the same thing as NET_SSH2_LOG_REALTIME with the caveat that NET_SSH2_LOG_REALTIME_FILE
+                // needs to be defined and that the resultant log file will be capped out at NET_SSH2_LOG_MAX_SIZE. 
+                // the earliest part of the log file is denoted by the first <<< START >>> and is not going to necessarily
+                // at the beginning of the file
+                case NET_SSH2_LOG_REALTIME_FILE:
+                    if (!isset($this->realtime_log_file)) {
+                        // PHP doesn't seem to like using constants in fopen()
+                        $filename = NET_SSH2_LOG_REALTIME_FILE;
+                        $fp = fopen($filename, 'w');
+                        $this->realtime_log_file = $fp;
+                    }
+                    if (!is_resource($this->realtime_log_file)) {
+                        break;
+                    }
+                    $entry = $this->_format_log(array($message), array($message_number));
+                    if ($this->realtime_log_wrap) {
+                        $temp = "<<< START >>>\r\n";
+                        $entry.= $temp;
+                        fseek($this->realtime_log_file, ftell($this->realtime_log_file) - strlen($temp));
+                    }
+                    $this->realtime_log_size+= strlen($entry);
+                    if ($this->realtime_log_size > NET_SSH2_LOG_MAX_SIZE) {
+                        fseek($this->realtime_log_file, 0);
+                        $this->realtime_log_size = strlen($entry);
+                        $this->realtime_log_wrap = true;
+                    }
+                    fputs($this->realtime_log_file, $entry);
+            }
     }
 
     /**
@@ -2654,6 +2825,14 @@ class Net_SSH2 {
         extract(unpack('Nlength', $this->_string_shift($server_public_host_key, 4)));
         $this->_string_shift($server_public_host_key, $length);
 
+        if ($this->signature_validated) {
+            return $this->bitmap ?
+                $this->signature_format . ' ' . base64_encode($this->server_public_host_key) :
+                false;
+        }
+
+        $this->signature_validated = true;
+
         switch ($this->signature_format) {
             case 'ssh-dss':
                 $temp = unpack('Nlength', $this->_string_shift($server_public_host_key, 4));
@@ -2755,8 +2934,12 @@ class Net_SSH2 {
                     user_error('Bad server signature', E_USER_NOTICE);
                     return $this->_disconnect(NET_SSH2_DISCONNECT_HOST_KEY_NOT_VERIFIABLE);
                 }
+                break;
+            default:
+                user_error('Unsupported signature format', E_USER_NOTICE);
+                return $this->_disconnect(NET_SSH2_DISCONNECT_HOST_KEY_NOT_VERIFIABLE);
         }
 
-        return $this->server_public_host_key;
+        return $this->signature_format . ' ' . base64_encode($this->server_public_host_key);
     }
 }

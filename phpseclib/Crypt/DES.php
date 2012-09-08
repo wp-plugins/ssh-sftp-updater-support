@@ -295,10 +295,7 @@ class Crypt_DES {
     {
         if ( !defined('CRYPT_DES_MODE') ) {
             switch (true) {
-                case extension_loaded('mcrypt'):
-                    // i'd check to see if des was supported, by doing in_array('des', mcrypt_list_algorithms('')),
-                    // but since that can be changed after the object has been created, there doesn't seem to be
-                    // a lot of point...
+                case extension_loaded('mcrypt') && in_array('des', mcrypt_list_algorithms()):
                     define('CRYPT_DES_MODE', CRYPT_DES_MODE_MCRYPT);
                     break;
                 default:
@@ -374,7 +371,7 @@ class Crypt_DES {
      *
      * Depending on what $method is set to, setPassword()'s (optional) parameters are as follows:
      *     {@link http://en.wikipedia.org/wiki/PBKDF2 pbkdf2}:
-     *         $hash, $salt, $method
+     *         $hash, $salt, $count
      *
      * @param String $password
      * @param optional String $method
@@ -392,7 +389,7 @@ class Crypt_DES {
                 }
                 // WPA and WPA use the SSID as the salt
                 if (!isset($salt)) {
-                    $salt = 'phpseclib';
+                    $salt = 'phpseclib/salt';
                 }
                 // RFC2898#section-4.2 uses 1,000 iterations by default
                 // WPA and WPA2 use 4,096.

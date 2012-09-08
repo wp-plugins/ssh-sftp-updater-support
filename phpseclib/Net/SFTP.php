@@ -57,7 +57,9 @@
 /**
  * Include Net_SSH2
  */
-require_once('Net/SSH2.php');
+if (!class_exists('Net_SSH2')) {
+    require_once('Net/SSH2.php');
+}
 
 /**#@+
  * @access public
@@ -835,11 +837,12 @@ class Net_SFTP extends Net_SSH2 {
         foreach ($dirs as $dir) {
             if ($dir == end($dirs)) {
                 unset($temp[$dir]);
-                break;
+                return true;
             }
-            if (isset($new[$key])) {
-                $temp = &$temp[$dir];
+            if (!isset($temp[$dir])) {
+                return false;
             }
+            $temp = &$temp[$dir];
         }
     }
 
@@ -1351,7 +1354,9 @@ class Net_SFTP extends Net_SSH2 {
             }
         }
 
-        $this->_read_put_responses($i);
+        if (!$this->_read_put_responses($i)) {
+            return false;
+        }
 
         if ($mode & NET_SFTP_LOCAL_FILE) {
             fclose($fp);
@@ -1621,6 +1626,7 @@ class Net_SFTP extends Net_SSH2 {
         if (!$this->_send_sftp_packet(NET_SFTP_RMDIR, pack('Na*', strlen($path), $path))) {
             return false;
         }
+        $this->_remove_dir($path);
 
         $i++;
 
