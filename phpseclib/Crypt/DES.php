@@ -291,7 +291,7 @@ class Crypt_DES {
      * @return Crypt_DES
      * @access public
      */
-    function Crypt_DES($mode = CRYPT_MODE_DES_CBC)
+    function Crypt_DES($mode = CRYPT_DES_MODE_CBC)
     {
         if ( !defined('CRYPT_DES_MODE') ) {
             switch (true) {
@@ -597,7 +597,7 @@ class Crypt_DES {
                 }
                 break;
             case CRYPT_DES_MODE_CFB:
-                if (!empty($buffer['xor'])) {
+                if (strlen($buffer['xor'])) {
                     $ciphertext = $plaintext ^ $buffer['xor'];
                     $iv = $buffer['encrypted'] . $ciphertext;
                     $start = strlen($ciphertext);
@@ -723,7 +723,7 @@ class Crypt_DES {
                 mcrypt_generic_init($this->demcrypt, $this->keys, $this->decryptIV);
             }
 
-            return $this->mode != 'ctr' ? $this->_unpad($plaintext) : $plaintext;
+            return $this->paddable ? $this->_unpad($plaintext) : $plaintext;
         }
 
         if (!is_array($this->keys)) {
@@ -774,15 +774,17 @@ class Crypt_DES {
                 }
                 break;
             case CRYPT_DES_MODE_CFB:
-                if (!empty($buffer['ciphertext'])) {
+                if (strlen($buffer['ciphertext'])) {
                     $plaintext = $ciphertext ^ substr($this->decryptIV, strlen($buffer['ciphertext']));
                     $buffer['ciphertext'].= substr($ciphertext, 0, strlen($plaintext));
-                    if (strlen($buffer['ciphertext']) == 8) {
+                    if (strlen($buffer['ciphertext']) != 8) {
+                        $block = $this->decryptIV;
+                    } else {
+                        $block = $buffer['ciphertext'];
                         $xor = $this->_processBlock($buffer['ciphertext'], CRYPT_DES_ENCRYPT);
                         $buffer['ciphertext'] = '';
                     }
                     $start = strlen($plaintext);
-                    $block = $this->decryptIV;
                 } else {
                     $plaintext = '';
                     $xor = $this->_processBlock($this->decryptIV, CRYPT_DES_ENCRYPT);
@@ -937,7 +939,7 @@ class Crypt_DES {
             if (($length & 7) == 0) {
                 return $text;
             } else {
-                user_error("The plaintext's length ($length) is not a multiple of the block size (8)", E_USER_NOTICE);
+                user_error("The plaintext's length ($length) is not a multiple of the block size (8)");
                 $this->padding = true;
             }
         }
