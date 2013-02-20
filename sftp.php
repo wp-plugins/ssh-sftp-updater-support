@@ -7,6 +7,8 @@ Version: 0.4
 Author: TerraFrost
 Author URI: http://phpseclib.sourceforge.net/
 */
+//include_once( ABSPATH . 'wp-admin/includes/screen.php' );
+//include_once( ABSPATH . 'wp-admin/includes/template.php' );
 
 // see http://adambrown.info/p/wp_hooks/hook/<filter name>
 add_filter('filesystem_method', 'phpseclib_filesystem_method', 10, 2); // since 2.6 - WordPress will ignore the ssh option if the php ssh extension is not loaded
@@ -55,6 +57,9 @@ function phpseclib_request_filesystem_credentials($value, $form_post, $type = ''
 		if (isset($_FILES['private_key_file']) && file_exists($_FILES['private_key_file']['tmp_name'])) {
 			$credentials['private_key'] = file_get_contents($_FILES['private_key_file']['tmp_name']);
 		}
+		// if this is set it'll make it so people can't upload files. ie. the constructor of File_Upload_Upgrader in wp-admin/includes/class-wp-upgrader.php
+		// calls wp_handle_upload() in wp-admin/includes/file.php if $_FILE is not empty and that, in turn, triggers a "File is not empty" error.
+		unset($_FILES['private_key_file']);
 	}
 	
 
@@ -122,13 +127,23 @@ jQuery(function($){
 	jQuery("#ftp, #ftps").click(function () {
 		jQuery(".ssh_keys").hide();
 	});
-	jQuery('form').submit(function () {
+	jQuery("#private_key_file").change(function (event) {
+		if (window.File && window.FileReader) {
+			var reader = new FileReader();
+			reader.onload = function(file) {
+				jQuery("#private_key").val(file.target.result);
+			};
+			reader.readAsBinaryString(event.target.files[0]);
+		}
+	});
+	jQuery("form").submit(function () {
 		if(typeof(Storage)!=="undefined") {
 			localStorage.privateKeyFile = jQuery("#private_key").val();
 		}
+		jQuery("#private_key_file").attr("disabled", "disabled");
 	});
 	if(typeof(Storage)!=="undefined" && localStorage.privateKeyFile) {
-		jQuery('#private_key').val(localStorage.privateKeyFile);
+		jQuery("#private_key").val(localStorage.privateKeyFile);
 	}
 	jQuery('form input[value=""]:first').focus();
 });
@@ -183,7 +198,7 @@ jQuery(function($){
 <label for="private_key"><?php _e('Copy / Paste Private Key:') ?></label>
 </div>
 </th>
-<td><textarea name="private_key" id="private_key" value="<?php echo esc_attr($private_key) ?>"<?php disabled( defined('FTP_PRIKEY') ); ?>></textarea>
+<td><textarea name="private_key" id="private_key" cols="58" rows="10" value="<?php echo esc_attr($private_key) ?>"<?php disabled( defined('FTP_PRIKEY') ); ?>></textarea>
 </td>
 </tr>
 <tr class="ssh_keys" valign="top" style="<?php if ( 'ssh' != $connection_type ) echo 'display:none' ?>">
