@@ -7,8 +7,6 @@ Version: 0.4
 Author: TerraFrost
 Author URI: http://phpseclib.sourceforge.net/
 */
-//include_once( ABSPATH . 'wp-admin/includes/screen.php' );
-//include_once( ABSPATH . 'wp-admin/includes/template.php' );
 
 // see http://adambrown.info/p/wp_hooks/hook/<filter name>
 add_filter('filesystem_method', 'phpseclib_filesystem_method', 10, 2); // since 2.6 - WordPress will ignore the ssh option if the php ssh extension is not loaded
@@ -57,9 +55,6 @@ function phpseclib_request_filesystem_credentials($value, $form_post, $type = ''
 		if (isset($_FILES['private_key_file']) && file_exists($_FILES['private_key_file']['tmp_name'])) {
 			$credentials['private_key'] = file_get_contents($_FILES['private_key_file']['tmp_name']);
 		}
-		// if this is set it'll make it so people can't upload files. ie. the constructor of File_Upload_Upgrader in wp-admin/includes/class-wp-upgrader.php
-		// calls wp_handle_upload() in wp-admin/includes/file.php if $_FILE is not empty and that, in turn, triggers a "File is not empty" error.
-		unset($_FILES['private_key_file']);
 	}
 	
 
