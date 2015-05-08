@@ -62,7 +62,7 @@
  * @category  Crypt
  * @package   Crypt_RSA
  * @author    Jim Wigginton <terrafrost@php.net>
- * @copyright MMIX Jim Wigginton
+ * @copyright 2009 Jim Wigginton
  * @license   http://www.opensource.org/licenses/mit-license.html  MIT License
  * @link      http://phpseclib.sourceforge.net
  */
@@ -515,9 +515,16 @@ class Crypt_RSA
 
                     $versions = array();
                     if (!empty($matches[1])) {
-                       for ($i = 0; $i < count($matches[1]); $i++) {
-                          $versions[$matches[1][$i]] = trim(str_replace('=>', '', strip_tags($matches[2][$i])));
-                       }
+                        for ($i = 0; $i < count($matches[1]); $i++) {
+                            $fullVersion = trim(str_replace('=>', '', strip_tags($matches[2][$i])));
+
+                            // Remove letter part in OpenSSL version
+                            if (!preg_match('/(\d+\.\d+\.\d+)/i', $fullVersion, $m)) {
+                                $versions[$matches[1][$i]] = $fullVersion;
+                            } else {
+                                $versions[$matches[1][$i]] = $m[0];
+                            }
+                        }
                     }
 
                     // it doesn't appear that OpenSSL versions were reported upon until PHP 5.3+
@@ -1766,6 +1773,42 @@ class Crypt_RSA
     }
 
     /**
+     * Returns the public key's fingerprint
+     *
+     * The public key's fingerprint is returned, which is equivalent to running `ssh-keygen -lf rsa.pub`. If there is
+     * no public key currently loaded, false is returned.
+     * Example output (md5): "c1:b1:30:29:d7:b8:de:6c:97:77:10:d7:46:41:63:87" (as specified by RFC 4716)
+     *
+     * @access public
+     * @param String $algorithm The hashing algorithm to be used. Valid options are 'md5' and 'sha256'. False is returned
+     * for invalid values.
+     */
+    public function getPublicKeyFingerprint($algorithm = 'md5')
+    {
+        if (empty($this->modulus) || empty($this->publicExponent)) {
+            return false;
+        }
+
+        $modulus = $this->modulus->toBytes(true);
+        $publicExponent = $this->publicExponent->toBytes(true);
+
+        $RSAPublicKey = pack('Na*Na*Na*', strlen('ssh-rsa'), 'ssh-rsa', strlen($publicExponent), $publicExponent, strlen($modulus), $modulus);
+
+        switch($algorithm)
+        {
+            case 'sha256':
+                $hash = new Crypt_Hash('sha256');
+                $base = base64_encode($hash->hash($RSAPublicKey));
+                return substr($base, 0, strlen($base) - 1);
+            case 'md5':
+                return substr(chunk_split(md5($RSAPublicKey), 2, ':'), 0, -1);
+            default:
+                return false;
+        }
+
+    }
+
+    /**
      * Returns the private key
      *
      * The private key is only returned if the currently loaded key contains the constituent prime numbers.
@@ -2524,7 +2567,7 @@ class Crypt_RSA
         // be output.
 
         $emLen = ($emBits + 1) >> 3; // ie. ceil($emBits / 8)
-        $sLen = $this->sLen == false ? $this->hLen : $this->sLen;
+        $sLen = $this->sLen === false ? $this->hLen : $this->sLen;
 
         $mHash = $this->hash->hash($m);
         if ($emLen < $this->hLen + $sLen + 2) {
@@ -2562,7 +2605,7 @@ class Crypt_RSA
         // be output.
 
         $emLen = ($emBits + 1) >> 3; // ie. ceil($emBits / 8);
-        $sLen = $this->sLen == false ? $this->hLen : $this->sLen;
+        $sLen = $this->sLen === false ? $this->hLen : $this->sLen;
 
         $mHash = $this->hash->hash($m);
         if ($emLen < $this->hLen + $sLen + 2) {

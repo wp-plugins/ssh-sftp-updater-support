@@ -3,8 +3,8 @@ Contributors: TerraFrost
 Donate link: http://sourceforge.net/donate/index.php?group_id=198487
 Tags: ssh, sftp
 Requires at least: 3.1
-Tested up to: 4.0
-Stable tag: 0.5
+Tested up to: 4.2
+Stable tag: 0.6
 
 "SSH SFTP Updater Support" is the easiest way to keep your Wordpress installation up-to-date with SFTP.
 
@@ -40,3 +40,7 @@ Keeping your Wordpress install up-to-date and installing plugins in a hassle-fre
 
 = 0.5 =
 * update phpseclib to latest version
+
+= 0.6 =
+* update phpseclib to latest version
+* make plugin work with 4.2's new modal dialog

@@ -48,7 +48,7 @@
  * @category  Net
  * @package   Net_SFTP
  * @author    Jim Wigginton <terrafrost@php.net>
- * @copyright MMIX Jim Wigginton
+ * @copyright 2009 Jim Wigginton
  * @license   http://www.opensource.org/licenses/mit-license.html  MIT License
  * @link      http://phpseclib.sourceforge.net
  */
@@ -102,6 +102,11 @@ define('NET_SFTP_LOCAL_FILE',    1);
  */
 // this value isn't really used anymore but i'm keeping it reserved for historical reasons
 define('NET_SFTP_STRING',        2);
+/**
+ * Reads data from callback:
+ * function callback($length) returns string to proceed, null for EOF
+ */
+define('NET_SFTP_CALLBACK',     16);
 /**
  * Resumes an upload
  */
@@ -1759,6 +1764,10 @@ class Net_SFTP extends Net_SSH2
      *
      * If $data is a resource then it'll be used as a resource instead.
      *
+     *
+     * Setting $mode to NET_SFTP_CALLBACK will use $data as callback function, which gets only one parameter -- number
+     * of bytes to return, and returns a string if there is some data or null if there is no more data
+     *
      * Currently, only binary mode is supported.  As such, if the line endings need to be adjusted, you will need to take
      * care of that, yourself.
      *
@@ -1784,11 +1793,12 @@ class Net_SFTP extends Net_SSH2
      * @param optional Integer $mode
      * @param optional Integer $start
      * @param optional Integer $local_start
+     * @param optional callable|null $progressCallback
      * @return Boolean
      * @access public
      * @internal ASCII mode for SFTPv4/5/6 can be supported by adding a new function - Net_SFTP::setMode().
      */
-    function put($remote_file, $data, $mode = NET_SFTP_STRING, $start = -1, $local_start = -1)
+    function put($remote_file, $data, $mode = NET_SFTP_STRING, $start = -1, $local_start = -1, $progressCallback = null)
     {
         if (!($this->bitmap & NET_SSH2_MASK_LOGIN)) {
             return false;
@@ -1836,7 +1846,15 @@ class Net_SFTP extends Net_SSH2
         }
 
         // http://tools.ietf.org/html/draft-ietf-secsh-filexfer-13#section-8.2.3
+        $dataCallback = false;
         switch (true) {
+            case $mode & NET_SFTP_CALLBACK:
+                if (!is_callable($data)) {
+                    user_error("\$data should be is_callable if you set NET_SFTP_CALLBACK flag");
+                }
+                $dataCallback = $data;
+                // do nothing
+                break;
             case is_resource($data):
                 $mode = $mode & ~NET_SFTP_LOCAL_FILE;
                 $fp = $data;
@@ -1863,6 +1881,8 @@ class Net_SFTP extends Net_SSH2
             } else {
                 fseek($fp, $offset);
             }
+        } elseif ($dataCallback) {
+            $size = 0;
         } else {
             $size = strlen($data);
         }
@@ -1874,8 +1894,15 @@ class Net_SFTP extends Net_SSH2
         // make the SFTP packet be exactly 4096 bytes by including the bytes in the NET_SFTP_WRITE packets "header"
         $sftp_packet_size-= strlen($handle) + 25;
         $i = 0;
-        while ($sent < $size) {
-            $temp = isset($fp) ? fread($fp, $sftp_packet_size) : substr($data, $sent, $sftp_packet_size);
+        while ($dataCallback || ($sent < $size)) {
+            if ($dataCallback) {
+                $temp = call_user_func($dataCallback, $sftp_packet_size);
+                if (is_null($temp)) {
+                    break;
+                }
+            } else {
+                $temp = isset($fp) ? fread($fp, $sftp_packet_size) : substr($data, $sent, $sftp_packet_size);
+            }
             $subtemp = $offset + $sent;
             $packet = pack('Na*N3a*', strlen($handle), $handle, $subtemp / 4294967296, $subtemp, strlen($temp), $temp);
             if (!$this->_send_sftp_packet(NET_SFTP_WRITE, $packet)) {
@@ -1885,6 +1912,9 @@ class Net_SFTP extends Net_SSH2
                 return false;
             }
             $sent+= strlen($temp);
+            if (is_callable($progressCallback)) {
+                call_user_func($progressCallback, $sent);
+            }
 
             $i++;
 
