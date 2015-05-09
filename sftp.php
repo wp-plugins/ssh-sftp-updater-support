@@ -32,7 +32,7 @@ function phpseclib_fs_ftp_connection_types($types) {
 	return $types;
 }
 
-function phpseclib_request_filesystem_credentials_modal($value, $form_post, $type = '', $error = false, $context = false, $extra_fields = null) {
+function phpseclib_request_filesystem_credentials_modal($form_post, $type = '', $error = false, $context = false, $extra_fields = null, $allow_relaxed_file_ownership = false ) {
 	if ( empty($type) ) {
 		$type = get_filesystem_method( array(), $context, $allow_relaxed_file_ownership );
 	}
