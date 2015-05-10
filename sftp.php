@@ -3,17 +3,18 @@
 Plugin Name: SSH SFTP Updater Support
 Plugin URI: http://phpseclib.sourceforge.net/wordpress.htm
 Description: Update your Wordpress blog / plugins via SFTP without libssh2
-Version: 0.6
+Version: 0.6.1
 Author: TerraFrost
 Author URI: http://phpseclib.sourceforge.net/
 */
 
 // see http://adambrown.info/p/wp_hooks/hook/<filter name>
 add_filter('filesystem_method', 'phpseclib_filesystem_method', 10, 2); // since 2.6 - WordPress will ignore the ssh option if the php ssh extension is not loaded
-$func_name = version_compare(get_bloginfo('version'), '4.2.0') >= 0 ?
-	'phpseclib_request_filesystem_credentials_modal' :
-	'phpseclib_request_filesystem_credentials';
-add_filter('request_filesystem_credentials', $func_name, 10, 6); // since 2.5 - Alter some strings and don't ask for the public key
+if (version_compare(get_bloginfo('version'), '4.2.0') >= 0) {
+	add_filter('request_filesystem_credentials', 'phpseclib_request_filesystem_credentials_modal', 10, 7);
+} else {
+	add_filter('request_filesystem_credentials', 'phpseclib_request_filesystem_credentials', 10, 6); // since 2.5 - Alter some strings and don't ask for the public key
+}
 add_filter('fs_ftp_connection_types', 'phpseclib_fs_ftp_connection_types'); // since 2.9 - Add the SSH2 option to the connection options
 add_filter('filesystem_method_file', 'phpseclib_filesystem_method_file', 10, 2); // since 2.6 - Direct WordPress to use our ssh2 class
 
@@ -32,7 +33,7 @@ function phpseclib_fs_ftp_connection_types($types) {
 	return $types;
 }
 
-function phpseclib_request_filesystem_credentials_modal($form_post, $type = '', $error = false, $context = false, $extra_fields = null, $allow_relaxed_file_ownership = false ) {
+function phpseclib_request_filesystem_credentials_modal($value, $form_post, $type = '', $error = false, $context = false, $extra_fields = null, $allow_relaxed_file_ownership = false ) {
 	if ( empty($type) ) {
 		$type = get_filesystem_method( array(), $context, $allow_relaxed_file_ownership );
 	}
