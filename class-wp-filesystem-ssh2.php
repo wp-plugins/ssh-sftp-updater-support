@@ -215,7 +215,11 @@ class WP_Filesystem_SSH2 extends WP_Filesystem_Base {
 		return $this->link->rename($source, $destination);
 	}
 
-	function delete($file, $recursive = false) {
+	function delete($file, $recursive = false, $type = false) {
+		if ( 'f' == $type || $this->is_file($file) )
+			return $this->link->delete($file);
+		if ( ! $recursive )
+			return $this->link->rmdir($file);
 		return $this->link->delete($file, $recursive);
 	}
 
@@ -297,6 +301,9 @@ class WP_Filesystem_SSH2 extends WP_Filesystem_Base {
 		$ret = array();
 		$entries = $this->link->rawlist($path);
 
+		if ( $entries === false )
+			return false;
+
 		foreach ($entries as $name => $entry) {
 			$struc = array();
 			$struc['name'] = $name;
@@ -313,8 +320,8 @@ class WP_Filesystem_SSH2 extends WP_Filesystem_Base {
 			$struc['perms'] 	= $entry['permissions'];
 			$struc['permsn']	= $this->getnumchmodfromh($struc['perms']);
 			$struc['number'] 	= false;
-			$struc['owner']    	= $this->owner($path.'/'.$entry, $entry['uid']);
-			$struc['group']    	= $this->group($path.'/'.$entry, $entry['gid']);
+			$struc['owner']    	= $this->owner($path.'/'.$name, $entry['uid']);
+			$struc['group']    	= $this->group($path.'/'.$name, $entry['gid']);
 			$struc['size']    	= $entry['size'];//$this->size($path.'/'.$entry);
 			$struc['lastmodunix']= $entry['mtime'];//$this->mtime($path.'/'.$entry);
 			$struc['lastmod']   = date('M j',$struc['lastmodunix']);
