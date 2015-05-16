@@ -8,6 +8,8 @@ Author: TerraFrost
 Author URI: http://phpseclib.sourceforge.net/
 */
 
+error_reporting(E_ALL);
+
 // see http://adambrown.info/p/wp_hooks/hook/<filter name>
 add_filter('filesystem_method', 'phpseclib_filesystem_method', 10, 2); // since 2.6 - WordPress will ignore the ssh option if the php ssh extension is not loaded
 if (version_compare(get_bloginfo('version'), '4.2.0') >= 0) {
@@ -100,8 +102,12 @@ function phpseclib_request_filesystem_credentials_modal($value, $form_post, $typ
 
 	if ( $error ) {
 		$error_string = __('<strong>ERROR:</strong> There was an error connecting to the server, Please verify the settings are correct.');
-		if ( is_wp_error($error) )
-			$error_string = esc_html( $error->get_error_message() );
+		if ( is_wp_error($error) ) {
+			$error_strings = $error->get_error_messages();
+			//foreach ( $error_strings as &$error_string )
+			//	$error_string = esc_html( $error_string );
+			$error_string = implode('<br />', $error_strings);
+		}
 		echo '<div id="message" class="error"><p>' . $error_string . '</p></div>';
 	}
 
