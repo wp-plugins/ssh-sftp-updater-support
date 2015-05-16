@@ -8,8 +8,6 @@ Author: TerraFrost
 Author URI: http://phpseclib.sourceforge.net/
 */
 
-error_reporting(E_ALL);
-
 // see http://adambrown.info/p/wp_hooks/hook/<filter name>
 add_filter('filesystem_method', 'phpseclib_filesystem_method', 10, 2); // since 2.6 - WordPress will ignore the ssh option if the php ssh extension is not loaded
 if (version_compare(get_bloginfo('version'), '4.2.0') >= 0) {
