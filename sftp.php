@@ -164,7 +164,6 @@ jQuery(function($){
 </script>
 <form action="<?php echo $form_post ?>" method="post" enctype="multipart/form-data">
 <div class="wrap">
-<?php screen_icon(); ?>
 <h2><?php _e('Connection Information') ?></h2>
 <p><?php
 	$label_user = __('Username');
